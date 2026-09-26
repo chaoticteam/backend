@@ -2,6 +2,10 @@ package com.chaoticteam.backend.auth.entities;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -28,9 +32,12 @@ public class ProfileEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Long id;
 
+    @JsonAlias("first_name")
     private String firstName;
+    @JsonAlias("last_name")
     private String lastName;
 
     private String photo;
@@ -55,6 +62,7 @@ public class ProfileEntity {
     private boolean portfolio;
 
     // relations
+    @JsonIgnore
     @OneToMany(cascade = CascadeType.ALL, mappedBy = "profileEntity")
     private List<TelephoneEntity> telephoneEntity;
 }

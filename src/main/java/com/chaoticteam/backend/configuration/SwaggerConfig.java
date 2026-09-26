@@ -29,6 +29,10 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
         @Server(
             url = "http://localhost:8080",
             description = "Servidor local"
+        ),
+        @Server(
+            url = "http://localhost:8000",
+            description = "Servidor local (puerto de go-server)"
         )
     },
     security = {

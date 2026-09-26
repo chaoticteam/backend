@@ -2,6 +2,7 @@ package com.chaoticteam.backend.auth.entities;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -37,6 +38,9 @@ public class UserEntity {
 
     private String username;
     private String email;
+
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean verified;
 
     @JsonIgnore
     private String password;
