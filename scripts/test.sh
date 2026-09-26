@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs the automated tests against a throwaway PostgreSQL container.
 # Needs only Docker (no local JDK, no compose): the DB and Maven both run in containers.
+# Prints the total line coverage at the end (JaCoCo report: target/site/jacoco/index.html).
 # Extra arguments go to Maven, e.g.  scripts/test.sh -Dtest=AuthAcceptanceTest
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -30,3 +31,5 @@ docker run --rm --network host \
   -e TEST_DB_PORT="$PORT" \
   -v "$PWD":/app -v m2cache:/root/.m2 -w /app \
   maven:3.9-eclipse-temurin-17 mvn -B verify "$@"
+
+scripts/coverage.sh
