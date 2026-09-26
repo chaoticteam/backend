@@ -1,5 +1,13 @@
 # Plan: paridad de la API `chaoticteams/backend` (Spring Boot) con la doc de go-server
 
+> **Estado: implementado y verificado** (rama `feat/api-parity`). Los 30 endpoints de la doc responden con los contratos de go-server
+> (`docs/smoke-test.sh` los recorre) y `/v3/api-docs` los publica todos. Desviaciones respecto al plan original:
+> - CORS usa `app.cors.allowed-origin-patterns` (env `CORS_ALLOWED_ORIGINS`, por defecto `*`) en lugar de leer la tabla `site`, porque con esa tabla un origen nuevo nunca podría crear su primer comentario.
+> - La cookie `access_token` dura 10 h (igual que el JWT, no 1 h) y su `Secure`/`SameSite` se configuran con `COOKIE_SECURE` / `COOKIE_SAME_SITE`.
+> - Los listados de usuario inexistente devuelven `[]` (go devolvía 500 en courses) y los recursos ajenos devuelven 404 como en go.
+> - No se añadieron tests automatizados: el proyecto no tiene BD de test (H2/Testcontainers) y el contexto exige Postgres. La verificación es `docs/smoke-test.sh`.
+> - Swagger se escribió junto con cada controlador, no en una fase aparte.
+
 ## Contexto
 Buscamos que el backend Java (`~/projects/backend/backend`, Spring Boot 3.4 + springdoc 2.8.6 + JPA/Postgres + JWT) exponga los mismos endpoints y contratos que la doc de Postman https://al3xdiaz.github.io/go-server/. Los contratos de respuesta, las reglas de auth y los status codes salen del código fuente de `github.com/Al3xDiaz/go-server`, porque la doc solo muestra requests. El frontend `~/projects/frontend/dashboard` ya consume esos contratos.
 
