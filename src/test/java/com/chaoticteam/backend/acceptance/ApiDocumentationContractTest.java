@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +44,17 @@ class ApiDocumentationContractTest extends AcceptanceTest {
             api = mapper.readTree(body);
         }
         return api;
+    }
+
+    /** The pipeline publishes this file as the API reference (openapi_spec job). */
+    @Test
+    void exportsTheOpenApiDocumentForThePipeline() throws Exception {
+        Path file = Path.of("target", "openapi.json");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(api()));
+
+        assertThat(file).isNotEmptyFile();
+        assertThat(mapper.readTree(file.toFile()).get("openapi").asText()).startsWith("3.");
     }
 
     @Test

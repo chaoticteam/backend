@@ -1,0 +1,231 @@
+---
+# CI/CD for chaoticteams/backend (generated with the ci-pipeline skill).
+#
+# Runs ONLY for merge requests targeting main/master and for main/master itself (no branch pipelines).
+# Direct pushes to main should be blocked in the repo settings: changes reach main through merge requests.
+# There is no deploy stage yet: when a target exists add `deploy` between `docs` and `destroy`.
+#
+# Image tags (built on every run, see build_image):
+#   production (main)     <FullSemVer>          and  latest
+#   review (merge request) <FullSemVer>-review-<MR id>  and  review-<MR id>
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^(main|master)$/
+      when: always
+      variables:
+        environment: review-$CI_MERGE_REQUEST_IID
+        environment_url: https://review-$CI_MERGE_REQUEST_IID.api.chaoticteam.com
+        image_suffix: "-review-$CI_MERGE_REQUEST_IID"
+    - if: $CI_COMMIT_BRANCH =~ /^(main|master)$/
+      when: always
+      variables:
+        environment: production
+        environment_url: https://api.chaoticteam.com
+        image_suffix: ""
+
+stages:
+  - version
+  - build
+  - test-coverage
+  - docs
+  # - deploy   # optional: add when there is a deployment target
+  - destroy
+
+.environment:
+  environment:
+    name: $environment
+    url: $environment_url
+    action: prepare # does not create a deployment
+
+.maven:
+  image: maven:3.9.16-eclipse-temurin-17 # JDK 17 = java.version in pom.xml
+  variables:
+    MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  cache:
+    key: { files: [pom.xml] }
+    paths: [.m2/repository]
+
+# ---------------------------------------------------------------- version
+get_version:
+  extends: .environment
+  stage: version
+  image:
+    entrypoint: [""]
+    name: gittools/gitversion:6.8.2-ubuntu.24.04-8.0
+  variables:
+    GIT_DEPTH: 0
+    GIT_STRATEGY: fetch
+    IGNORE_NORMALISATION_GIT_HEAD_MOVE: 1
+  script:
+    - /tools/dotnet-gitversion /nocache /nofetch /showvariable MajorMinorPatch > version.txt
+    - /tools/dotnet-gitversion /nocache /nofetch /showvariable FullSemVer > fullSemVer.txt
+    - /tools/dotnet-gitversion /nocache /nofetch /showvariable PreReleaseLabel > preReleaseLabel.txt
+    - cat *.txt
+  artifacts:
+    paths:
+      - '*.txt'
+
+# ------------------------------------------------------------------ build
+build:
+  extends: [.environment, .maven]
+  stage: build
+  needs: [get_version]
+  script:
+    - mvn -B versions:set -DnewVersion="$(cat version.txt)" -DgenerateBackupPoms=false
+    - mvn -B package -DskipTests
+  artifacts:
+    paths: ["target/*.jar"]
+    expire_in: 1 week
+
+# Published on every run (main and merge requests) with a per-environment tag.
+build_image:
+  extends: .environment
+  stage: build
+  image: docker:29
+  services:
+    - docker:29-dind # needs a runner in privileged mode (gitlab.com shared runners have it)
+  needs: [get_version]
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    # version from GitVersion + environment suffix; docker tags cannot contain "+"
+    - TAG="$(printf '%s%s' "$(cat fullSemVer.txt)" "$image_suffix" | tr -c 'A-Za-z0-9_.-' '-')"
+    - if [ "$environment" = "production" ]; then MOVING=latest; else MOVING="$environment"; fi
+    - docker build --build-arg VERSION="$TAG" -f dockerfile -t "$CI_REGISTRY_IMAGE:$TAG" -t "$CI_REGISTRY_IMAGE:$MOVING" .
+    - docker push "$CI_REGISTRY_IMAGE:$TAG"
+    - docker push "$CI_REGISTRY_IMAGE:$MOVING"
+    - 'echo "Published $CI_REGISTRY_IMAGE:$TAG (also :$MOVING)"'
+
+# ---------------------------------------------------------- test-coverage
+# Acceptance tests run against a real PostgreSQL (service) -> src/test/resources/application-test.properties
+test-coverage:
+  extends: [.environment, .maven]
+  stage: test-coverage
+  needs: [build]
+  services:
+    - name: postgres:17-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: chaoticteam_test
+    POSTGRES_USER: user
+    POSTGRES_PASSWORD: password
+    TEST_DB_HOST: postgres
+    TEST_DB_PORT: "5432"
+  script:
+    - mvn -B verify
+    - scripts/coverage.sh # prints "Total coverage: NN.N %" (JaCoCo report in target/site/jacoco)
+  coverage: '/Total coverage: (\d+\.\d+) %/'
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - target/site/jacoco/
+      - target/openapi.json # exported by ApiDocumentationContractTest, used by the docs stage
+    reports:
+      junit: target/surefire-reports/TEST-*.xml
+
+# Without deploy: opens the review-<MR id> environment so there is something to close on merge
+open_environment:
+  stage: test-coverage
+  image: alpine:3.24
+  needs: []
+  environment:
+    name: $environment
+    url: $environment_url
+    on_stop: stop_environment
+    auto_stop_in: 1 week
+  script:
+    - echo "Environment $environment"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+# ------------------------------------------------------------------- docs
+# OpenAPI (springdoc, code-first) -> lint -> Scalar HTML. Artifact "API docs" in the MR; GitLab Pages on main.
+openapi_spec:
+  extends: .environment
+  stage: docs
+  image: alpine:3.24
+  needs: [test-coverage]
+  script:
+    - test -s target/openapi.json
+    - cp target/openapi.json openapi.json
+  artifacts:
+    paths: [openapi.json]
+
+openapi_lint:
+  extends: .environment
+  stage: docs
+  image: node:24-alpine # LTS
+  needs: [openapi_spec]
+  script:
+    - npx --yes @redocly/cli@2.54.3 lint openapi.json
+  allow_failure: true # tighten when the spec is clean
+
+api_docs:
+  extends: .environment
+  stage: docs
+  image: alpine:3.24
+  needs: [openapi_spec]
+  variables:
+    SCALAR_VERSION: "1.72.1" # @scalar/api-reference (MIT)
+  script:
+    - apk add --no-cache jq
+    - mkdir -p public
+    # "Try it out" points to the environment of this pipeline (production or review-<id>)
+    - |
+      jq --arg u "$environment_url" '.servers = [{"url": $u}]' openapi.json > public/openapi.json
+    - |
+      cat > public/index.html <<EOF
+      <!doctype html>
+      <html>
+        <head>
+          <title>API Reference</title>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </head>
+        <body>
+          <div id="app"></div>
+          <script type="module">
+            import { createApiReference } from 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@${SCALAR_VERSION}/esm.js'
+            createApiReference('#app', { url: './openapi.json' })
+          </script>
+        </body>
+      </html>
+      EOF
+  artifacts:
+    expose_as: "API docs" # link in the MR widget (merge request pipelines only)
+    paths: [public/]
+
+# Free plan: Pages only for main (parallel Pages per MR need Premium/Ultimate).
+pages: # the job name must be exactly `pages`
+  stage: docs
+  image: alpine:3.24
+  needs: [api_docs]
+  script:
+    - echo "Docs published at ${CI_PAGES_URL}"
+  pages:
+    publish: public
+  environment:
+    name: $environment
+    url: $environment_url
+    action: prepare
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^(main|master)$/
+
+# ---------------------------------------------------------------- destroy
+stop_environment:
+  stage: destroy
+  image: alpine:3.24
+  needs: []
+  variables:
+    GIT_STRATEGY: none # the branch may have been deleted
+  environment:
+    name: $environment
+    action: stop
+  script:
+    - echo "Closing environment $environment"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true

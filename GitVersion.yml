@@ -1,0 +1,5 @@
+# GitVersion 6.x (the pipeline pins gittools/gitversion:6.8.2).
+# Trunk with merge requests. `next-version` is the floor until the first semver release tag exists:
+# after tagging a release commit on main (e.g. `git tag v0.1.0`), this line can be removed.
+workflow: GitHubFlow/v1
+next-version: 0.1.0
