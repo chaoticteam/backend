@@ -92,15 +92,49 @@ src/main/java/com/chaoticteam/backend/
 └── utils/           # manejo de errores, merge parcial de JSON, paginación
 docs/                # plan de paridad con go-server y smoke test
 scripts/             # test.sh y coverage.sh
+.gitlab-ci.yml       # pipeline de CI/CD (GitLab)
+GitVersion.yml       # cálculo de versiones (GitVersion 6)
 ```
 
+## CI/CD
+
+La pipeline vive en [`.gitlab-ci.yml`](.gitlab-ci.yml) y corre **solo** en Merge Requests hacia `main` y en `main`
+(no hay pipelines por push a ramas sueltas).
+
+| Stage | Job | Qué hace |
+|---|---|---|
+| `version` | `get_version` | Calcula la versión con GitVersion (`GitVersion.yml`) |
+| `build` | `build` | Compila el `.jar` con la versión calculada |
+| | `build_image` | Construye y publica la imagen en el Container Registry de GitLab |
+| `test-coverage` | `test-coverage` | Corre los tests contra un PostgreSQL de servicio, publica el reporte JUnit y la cobertura (badge) |
+| `docs` | `openapi_spec`, `openapi_lint`, `api_docs`, `pages` | Exporta el OpenAPI, lo valida y publica la referencia de la API (Scalar) |
+| `destroy` | `stop_environment` | Cierra el ambiente `review-<id>` al mergear o cerrar el MR |
+
+**Imágenes Docker.** Se publican en cada ejecución; la etiqueta lleva la versión de GitVersion y un sufijo según el ambiente:
+
+| Ambiente | Etiquetas | Ejemplo |
+|---|---|---|
+| producción (`main`) | `<versión>` y `latest` | `0.1.0-18`, `latest` |
+| review (MR) | `<versión>-review-<id del MR>` y `review-<id>` | `0.1.0-feat-x.1-26-review-12`, `review-12` |
+
+La versión también queda dentro de la imagen: `GET /api/version` responde `v<etiqueta>`.
+GitVersion parte de `next-version: 0.1.0`; al crear el primer tag semver (por ejemplo `git tag v0.1.0`) se puede quitar esa línea.
+
+**Documentación de la API.** En cada MR aparece el enlace «API docs» (artefacto) y en `main` se publica en GitLab Pages.
+Los servidores de la referencia apuntan al ambiente de la pipeline (`api.chaoticteam.com` en producción).
+
+**Ambientes.** Por ahora no hay despliegue: producción es `https://api.chaoticteam.com` y cada MR abre un ambiente
+`review-<id>` solo para trazabilidad. Cuando exista un destino se añade un stage `deploy`.
+
 ## Contribuir
+
+`main` está protegida: los cambios entran únicamente mediante Merge Request (Pull Request en GitHub), nunca con push directo.
 
 1. Crea una rama desde `main` y haz tus cambios.
 2. Ejecuta `scripts/test.sh`; la suite debe pasar.
 3. Si cambias la API, actualiza los ejemplos y anotaciones de Swagger; hay un test que verifica que los endpoints
    de la documentación sigan publicados.
-4. Abre un Merge Request (Pull Request en GitHub) hacia `main`.
+4. Abre un Merge Request hacia `main` (se rellena solo con la plantilla) y espera a que la pipeline pase.
 
 ## Licencia
 
