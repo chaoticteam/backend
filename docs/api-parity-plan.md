@@ -5,7 +5,7 @@
 > - CORS usa `app.cors.allowed-origin-patterns` (env `CORS_ALLOWED_ORIGINS`, por defecto `*`) en lugar de leer la tabla `site`, porque con esa tabla un origen nuevo nunca podría crear su primer comentario.
 > - La cookie `access_token` dura 10 h (igual que el JWT, no 1 h) y su `Secure`/`SameSite` se configuran con `COOKIE_SECURE` / `COOKIE_SAME_SITE`.
 > - Los listados de usuario inexistente devuelven `[]` (go devolvía 500 en courses) y los recursos ajenos devuelven 404 como en go.
-> - No se añadieron tests automatizados: el proyecto no tiene BD de test (H2/Testcontainers) y el contexto exige Postgres. La verificación es `docs/smoke-test.sh`.
+> - Los tests automáticos se añadieron en un segundo paso (la primera entrega los omitió por error). Ver "Tests automáticos" abajo.
 > - Swagger se escribió junto con cada controlador, no en una fase aparte.
 
 ## Contexto
@@ -130,6 +130,27 @@ Swagger: solo documenta lo que existe y tiene errores:
   - `commentaries/**`
   - `utils/GlobalErrorHandler.java`
 - Crear: los paquetes `courses/`, `achievements/`, `projects/`, `galleries/` y `profile/`, `auth/dto/UserResponse.java` y `docs/api-parity-plan.md`.
+
+## Tests automáticos
+
+69 tests de aceptación (JUnit 5 + MockMvc) que ejercitan toda la app (seguridad, controladores, JPA) contra un **PostgreSQL real y desechable**:
+
+```bash
+scripts/test.sh                              # levanta Postgres en Docker, corre Maven en un contenedor y limpia
+scripts/test.sh -Dtest=AuthAcceptanceTest    # una sola clase
+```
+
+Solo requiere Docker (sin JDK local ni compose). Si tienes JDK, puedes usar `./mvnw verify` con un Postgres en `localhost:55432` (o variables `TEST_DB_*`, ver `src/test/resources/application-test.properties`).
+
+| Clase | Qué valida |
+|---|---|
+| `AuthAcceptanceTest` | signup/login (`userName` alias, `{user, token, refreshToken}`, cookie), 401, userdata por Bearer o cookie, cookie vencida en endpoints públicos, validatecredetial, logout, refresh |
+| `OwnedResourcesAcceptanceTest` | courses, achievements, projects y galleries: listado público por `username`/`limit`, escritura solo del dueño, 404 en datos ajenos, PATCH parcial, 204 al borrar, `?type=bulk`, orden (año/fecha desc), validaciones |
+| `ProfileAcceptanceTest` | PATCH snake/camelCase, perfil público sin secretos, teléfonos, vCard (cabeceras y líneas), users |
+| `CommentariesAcceptanceTest` | aislamiento por header `Origin`, auth, borrado solo del autor |
+| `ApiDocumentationContractTest` | Swagger documenta los 30 endpoints de la doc, tags por módulo, sin `@Parameter` erróneos |
+
+Se comprobó que detectan fallos: al romper a propósito el chequeo de dueño, 4 tests fallan (`expected 404 but was 204`).
 
 ## Verificación
 1. `./mvnw clean verify` compila y pasa los tests.

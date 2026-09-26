@@ -36,8 +36,8 @@ public class ProfileController {
     @Operation(summary = "profile", description = "Get the public profile (with telephones) of a user")
     @ApiResponse(responseCode = "404", description = "User not found", content = @Content)
     public ResponseEntity<UserResponse> get(
-            @Parameter(description = "username", example = "admin", required = true)
-            @RequestParam String username) {
+            @Parameter(description = "username", example = "admin")
+            @RequestParam(required = false) String username) {
         return ResponseEntity.ok(service.get(username));
     }
 
