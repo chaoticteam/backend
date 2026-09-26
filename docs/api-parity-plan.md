@@ -133,7 +133,7 @@ Swagger: solo documenta lo que existe y tiene errores:
 
 ## Tests automáticos
 
-69 tests de aceptación (JUnit 5 + MockMvc) que ejercitan toda la app (seguridad, controladores, JPA) contra un **PostgreSQL real y desechable**:
+73 tests de aceptación (JUnit 5 + MockMvc) que ejercitan toda la app (seguridad, controladores, JPA) contra un **PostgreSQL real y desechable**:
 
 ```bash
 scripts/test.sh                              # levanta Postgres en Docker, corre Maven en un contenedor y limpia
@@ -148,6 +148,7 @@ Solo requiere Docker (sin JDK local ni compose). Si tienes JDK, puedes usar `./m
 | `OwnedResourcesAcceptanceTest` | courses, achievements, projects y galleries: listado público por `username`/`limit`, escritura solo del dueño, 404 en datos ajenos, PATCH parcial, 204 al borrar, `?type=bulk`, orden (año/fecha desc), validaciones |
 | `ProfileAcceptanceTest` | PATCH snake/camelCase, perfil público sin secretos, teléfonos, vCard (cabeceras y líneas), users |
 | `CommentariesAcceptanceTest` | aislamiento por header `Origin`, auth, borrado solo del autor |
+| `ErrorHandlingAcceptanceTest` | 405 (método no soportado), 415 (content-type), 400 (JSON malformado / id no numérico) con cuerpo `{"error":...}`, nunca 500 |
 | `ApiDocumentationContractTest` | Swagger documenta los 30 endpoints de la doc, tags por módulo, sin `@Parameter` erróneos |
 
 Se comprobó que detectan fallos: al romper a propósito el chequeo de dueño, 4 tests fallan (`expected 404 but was 204`).
