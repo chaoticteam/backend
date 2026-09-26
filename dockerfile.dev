@@ -1,5 +1,5 @@
-# Usa una imagen base de Java
-FROM openjdk:17-alpine
+# Usa una imagen base de Java (openjdk:17-alpine ya no existe en Docker Hub)
+FROM eclipse-temurin:17-jdk-alpine
 # Instala Maven (solo necesario si aún no tienes el archivo compilado)
 RUN apk add --no-cache maven
 # Directorio de trabajo dentro del contenedor

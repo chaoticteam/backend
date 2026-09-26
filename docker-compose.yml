@@ -1,3 +1,6 @@
+# Local development stack: the API (hot reload with spring-boot:run) + PostgreSQL.
+# Setup:  cp .env.example .env   (then set JWT_SECRET)   ->   docker compose up -d
+# External database? set SPRING_DATASOURCE_DB_HOST (and the other SPRING_DATASOURCE_* vars) in .env.
 services:
   backend:
     build:
@@ -12,29 +15,36 @@ services:
       SPRING_DATASOURCE_DB_NAME: ${SPRING_DATASOURCE_DB_NAME:-chaoticteamdb}
       SPRING_DATASOURCE_DB_HOST: ${SPRING_DATASOURCE_DB_HOST:-db}
       SPRING_DATASOURCE_DB_PORT: ${SPRING_DATASOURCE_DB_PORT:-5432}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required, copy .env.example to .env and set it}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # SPRING_PROFILES_ACTIVE: ${ENV:-dev}
     volumes:
       - ./src:/app/src  # Monta el código fuente local en el contenedor
       - ./target:/app/target  # Monta la carpeta target para compilación
-    # depends_on:
-    #   - db
+    depends_on:
+      db:
+        condition: service_healthy
     command: ./mvnw spring-boot:run  # Usamos maven para ejecutar la aplicación en dev
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-#   db:
-#     image: postgres:alpine
-#     container_name: chaoticteam-db
-#     environment:
-#       POSTGRES_DB: chaoticteamdb
-#       POSTGRES_USER: user
-#       POSTGRES_PASSWORD: password
-#     # ports:
-#     #   - "5432:5432"
-#     volumes:
-#       - postgres_data:/var/lib/postgresql/data
+  db:
+    image: postgres:17-alpine
+    container_name: chaoticteam-db
+    environment:
+      POSTGRES_DB: ${SPRING_DATASOURCE_DB_NAME:-chaoticteamdb}
+      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME:-user}
+      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-password}
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
-# volumes:
-#   postgres_data:
+volumes:
+  postgres_data:
