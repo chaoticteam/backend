@@ -83,6 +83,9 @@ class ApiDocumentationContractTest extends AcceptanceTest {
         assertThat(paths.at("/~1api~1auth~1login/post/security")).hasSize(0);
         assertThat(paths.at("/~1api~1courses/post/security").isMissingNode()).isTrue();
         assertThat(api().at("/components/securitySchemes/bearerAuth/scheme").asText()).isEqualTo("bearer");
+        // `name` and `in` are not allowed on an http security scheme (Redocly lint error in the pipeline)
+        assertThat(api().at("/components/securitySchemes/bearerAuth/name").isMissingNode()).isTrue();
+        assertThat(api().at("/components/securitySchemes/bearerAuth/in").isMissingNode()).isTrue();
     }
 
     @Test

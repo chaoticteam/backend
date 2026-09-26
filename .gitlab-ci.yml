@@ -159,8 +159,7 @@ openapi_lint:
   image: node:24-alpine # LTS
   needs: [openapi_spec]
   script:
-    - npx --yes @redocly/cli@2.54.3 lint openapi.json
-  allow_failure: true # tighten when the spec is clean
+    - npx --yes @redocly/cli@2.54.3 lint openapi.json # errors fail the job; warnings do not
 
 api_docs:
   extends: .environment
